@@ -1,0 +1,36 @@
+{
+  "name": "flowboard-backend",
+  "version": "1.0.0",
+  "private": true,
+  "main": "dist/server.js",
+  "scripts": {
+    "build": "tsc",
+    "postinstall": "npm run build",
+    "start": "node dist/server.js",
+    "dev": "concurrently \"tsc -w\" \"nodemon dist/server.js\""
+  },
+  "dependencies": {
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.3",
+    "@types/mongoose": "^5.11.96",
+    "@types/node": "^24.0.14",
+    "concurrently": "^9.2.0",
+    "cors": "^2.8.5",
+    "dotenv": "^17.2.0",
+    "express": "^4.21.2",
+    "mongoose": "^8.16.2",
+    "socket.io": "^4.8.1",
+    "typescript": "^5.8.3",
+    "zod": "^4.0.5"
+  },
+  "description": "The backend API for the Flowboard Kanban application.",
+  "author": "",
+  "license": "ISC",
+  "keywords": [
+    "kanban",
+    "nodejs",
+    "express",
+    "mongodb",
+    "socket.io"
+  ]
+}
