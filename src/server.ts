@@ -9,6 +9,7 @@ import { Server } from 'socket.io';
 import boardRoutes from './routes/boards';
 import listRoutes from './routes/lists';
 import cardRoutes from './routes/cards';
+import aiRoutes from './routes/ai';
 
 dotenv.config();
 
@@ -82,6 +83,7 @@ app.get('/', (req: Request, res: Response) => {
 app.use('/api/boards', boardRoutes);
 app.use('/api/lists', listRoutes);
 app.use('/api/cards', cardRoutes);
+app.use('/api/ai', aiRoutes);
 
 // --- Start Server ---
 // 3. Listen on 0.0.0.0 to accept connections from outside the container/server
