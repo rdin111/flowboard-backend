@@ -3,52 +3,62 @@ import { GoogleGenAI } from '@google/genai';
 
 const router = Router();
 
-// Ensure we have a real string for TS
+// Ensure the API key is set at startup
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 if (!GEMINI_API_KEY) {
     throw new Error('GEMINI_API_KEY environment variable is not set');
 }
 
-// Initialize client with a guaranteed string key
+// Initialize the client
 const genAI = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
 
 router.post('/generate-list', async (req: Request, res: Response) => {
     const { prompt: userPrompt } = req.body;
 
-    if (typeof userPrompt !== 'string' || userPrompt.trim() === '') {
+    // Validate input
+    if (typeof userPrompt !== 'string' || !userPrompt.trim()) {
         return res.status(400).json({ message: 'A prompt is required.' });
     }
 
     try {
+        // Strongly-worded prompt to avoid Markdown wrappers
         const metaPrompt = `
-      Based on the following user request, generate a relevant list title and an array of 3 to 5 task card titles.
-      User Request: "${userPrompt}"
+Respond with ONLY a raw JSON object (no Markdown, no backticks, no explanations) in this format:
+{
+  "listTitle": "A creative and relevant title for the list",
+  "cardTitles": ["First task", "Second task", "Third task"]
+}
 
-      Respond with ONLY a valid JSON object in the following format:
-      {
-        "listTitle": "A creative and relevant title for the list",
-        "cardTitles": ["First task", "Second task", "Third task"]
-      }
-    `;
+User Request: "${userPrompt}"
+`;
 
-        // Call the new models API directly
+        // Call the latest Flash model
         const result = await genAI.models.generateContent({
             model: 'gemini-2.5-flash-lite',
             contents: metaPrompt,
         });
 
-        const aiResponseText = result.text;
+        // Get and sanitize the text
+        let aiResponseText = (result.text ?? '').trim();
+        if (aiResponseText.startsWith('```')) {
+            aiResponseText = aiResponseText
+                .replace(/^```(?:json)?\s*/, '')
+                .replace(/```$/, '')
+                .trim();
+        }
+
+        // Ensure we actually got something
         if (!aiResponseText) {
-            console.error('Empty AI output');
+            console.error('Empty AI output after sanitization');
             return res.status(500).json({ message: 'AI returned no content.' });
         }
 
-        // Parse and validate
+        // Parse JSON and validate structure
         let parsed: { listTitle: string; cardTitles: string[] };
         try {
             parsed = JSON.parse(aiResponseText);
-        } catch (e) {
-            console.error('Failed to parse AI JSON:', e);
+        } catch (err) {
+            console.error('Failed to parse AI JSON:', err, aiResponseText);
             return res.status(500).json({ message: 'Invalid JSON from AI.' });
         }
 
@@ -61,6 +71,7 @@ router.post('/generate-list', async (req: Request, res: Response) => {
             return res.status(500).json({ message: 'Unexpected JSON structure from AI.' });
         }
 
+        // All good—send it back
         return res.json(parsed);
 
     } catch (error) {
