@@ -1,51 +1,71 @@
 import { Router, type Request, type Response } from 'express';
-import axios from 'axios';
+import { GoogleGenAI } from '@google/genai';
 
 const router = Router();
 
+// Ensure we have a real string for TS
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-// Using a current and efficient model
-const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`;
+if (!GEMINI_API_KEY) {
+    throw new Error('GEMINI_API_KEY environment variable is not set');
+}
+
+// Initialize client with a guaranteed string key
+const genAI = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
 
 router.post('/generate-list', async (req: Request, res: Response) => {
     const { prompt: userPrompt } = req.body;
 
-    if (!userPrompt) {
+    if (typeof userPrompt !== 'string' || userPrompt.trim() === '') {
         return res.status(400).json({ message: 'A prompt is required.' });
-    }
-    if (!GEMINI_API_KEY) {
-        return res.status(500).json({ message: 'AI API key is not configured on the server.' });
     }
 
     try {
         const metaPrompt = `
-            Based on the following user request, generate a relevant list title and an array of 3 to 5 task card titles.
-            User Request: "${userPrompt}"
+      Based on the following user request, generate a relevant list title and an array of 3 to 5 task card titles.
+      User Request: "${userPrompt}"
 
-            Respond with ONLY a valid JSON object in the following format, with no other text or markdown formatting:
-            {
-              "listTitle": "A creative and relevant title for the list",
-              "cardTitles": ["First task", "Second task", "Third task"]
-            }
-        `;
+      Respond with ONLY a valid JSON object in the following format:
+      {
+        "listTitle": "A creative and relevant title for the list",
+        "cardTitles": ["First task", "Second task", "Third task"]
+      }
+    `;
 
-        const requestBody = {
-            contents: [{ parts: [{ text: metaPrompt }] }],
-        };
-
-        const response = await axios.post(API_URL, requestBody, {
-            headers: { 'Content-Type': 'application/json' },
+        // Call the new models API directly
+        const result = await genAI.models.generateContent({
+            model: 'gemini-2.5-flash-lite',
+            contents: metaPrompt,
         });
 
-        const aiResponseText = response.data.candidates[0].content.parts[0].text;
+        const aiResponseText = result.text;
+        if (!aiResponseText) {
+            console.error('Empty AI output');
+            return res.status(500).json({ message: 'AI returned no content.' });
+        }
 
-        // Attempt to parse the JSON from the AI's response
-        const parsedResponse = JSON.parse(aiResponseText);
-        res.json(parsedResponse);
+        // Parse and validate
+        let parsed: { listTitle: string; cardTitles: string[] };
+        try {
+            parsed = JSON.parse(aiResponseText);
+        } catch (e) {
+            console.error('Failed to parse AI JSON:', e);
+            return res.status(500).json({ message: 'Invalid JSON from AI.' });
+        }
 
-    } catch (error: any) {
-        console.error('Error in /generate-list route:', error.response?.data || error.message);
-        res.status(500).json({ message: 'Failed to generate list from AI.' });
+        if (
+            typeof parsed.listTitle !== 'string' ||
+            !Array.isArray(parsed.cardTitles) ||
+            !parsed.cardTitles.every((t) => typeof t === 'string')
+        ) {
+            console.error('AI returned malformed JSON:', parsed);
+            return res.status(500).json({ message: 'Unexpected JSON structure from AI.' });
+        }
+
+        return res.json(parsed);
+
+    } catch (error) {
+        console.error('Error calling Gemini API:', error);
+        return res.status(500).json({ message: 'Failed to generate list from AI.' });
     }
 });
 
